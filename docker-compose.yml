@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  streamlit-app:
+    build: .
+    container_name: baseball-analysis-app
+    restart: always
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app:rw
+      - ./logs:/app/logs:rw
+      - ./.streamlit:/app/.streamlit:ro
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      # GOOGLE_APPLICATION_CREDENTIALS を使う場合はコンテナ内のパスを指定
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/.streamlit/service_account.json
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_TABLE=${SUPABASE_TABLE}

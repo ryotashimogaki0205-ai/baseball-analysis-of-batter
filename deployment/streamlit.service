@@ -1,0 +1,33 @@
+[Unit]
+Description=Streamlit app - baseball-analysis-of-batter
+After=network.target
+
+[Service]
+Type=simple
+# 実行ユーザーを必要に応じて変更してください（例: ubuntu）
+User=%i
+WorkingDirectory=/workspaces/baseball-analysis-of-batter
+Environment=PATH=/workspaces/baseball-analysis-of-batter/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/bin/bash /workspaces/baseball-analysis-of-batter/deployment/start_streamlit.sh
+EnvironmentFile=/etc/default/streamlit_%i
+# The file /etc/default/streamlit_<username> should contain SUPABASE_URL, SUPABASE_KEY,
+# SUPABASE_SERVICE_KEY and SUPABASE_TABLE variables. Example:
+# SUPABASE_URL=https://hpzpkdyvjlvpfzbeddax.supabase.co
+# SUPABASE_KEY=sb_publishable_Fr-2qh2FJ6h2eKoP6m55RA_sHLYKzRo
+# SUPABASE_SERVICE_KEY=your_service_key_here
+# SUPABASE_TABLE=batting_data
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=streamlit-baseball
+
+[Install]
+WantedBy=multi-user.target
+
+# 使用方法:
+# 1) ファイルを /etc/systemd/system/ にコピーして、ユーザー名を指定して有効化します。
+#    sudo cp deployment/streamlit.service /etc/systemd/system/streamlit@youruser.service
+# 2) 有効化して起動します。
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now streamlit@youruser.service
