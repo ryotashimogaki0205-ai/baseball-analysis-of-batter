@@ -458,8 +458,10 @@ if team_name and player_name:
     col_result1, col_result2, col_result3 = st.columns(3)
     
     with col_result1:
-        batted_ball_angle_options = ['ゴロ', 'ライナー', 'フライ', '邪飛', 'その他']
-        batted_ball_angle = st.selectbox("打球角度を選択", batted_ball_angle_options, key='bb_angle')
+        # 打球角度をカテゴリ選択 → 内部的に数値に変換
+        batted_ball_angle_options = {'ゴロ（0°）': 0.0, 'ライナー（20°）': 20.0, 'フライ（45°）': 45.0, '邪飛（60°）': 60.0, 'その他（30°）': 30.0}
+        batted_ball_angle_label = st.selectbox("打球角度を選択", list(batted_ball_angle_options.keys()), key='bb_angle')
+        batted_ball_angle = batted_ball_angle_options[batted_ball_angle_label]
 
     with col_result2:
         result_options = ['凡退', '単打', '二塁打', '三塁打', '本塁打', '四球', '死球', '犠打', '犠飛', '三振', '出塁']
