@@ -155,6 +155,56 @@ def save_record_to_supabase(record):
         return False
 
 
+def delete_record_from_supabase(plate_id):
+    """Supabaseからレコードを削除する（サービスキーを使用）"""
+    try:
+        url, _ = get_supabase_config()
+        service_key = os.getenv("SUPABASE_SERVICE_KEY", SUPABASE_SERVICE_KEY)
+        
+        if not service_key:
+            st.warning("SUPABASE_SERVICE_KEY が設定されていません。データを削除できません。")
+            return False
+
+        client = create_client(url, service_key)
+        response = client.table(SUPABASE_TABLE).delete().eq('plate_id', plate_id).execute()
+
+        if getattr(response, 'error', None):
+            error_message = getattr(response.error, 'message', response.error)
+            raise Exception(error_message)
+
+        return True
+    except Exception as e:
+        st.error(f"Supabaseデータ削除エラー: {str(e)}")
+        return False
+
+
+def update_record_in_supabase(plate_id, update_data):
+    """Supabaseのレコードを更新する（サービスキーを使用）"""
+    try:
+        url, _ = get_supabase_config()
+        service_key = os.getenv("SUPABASE_SERVICE_KEY", SUPABASE_SERVICE_KEY)
+        
+        if not service_key:
+            st.warning("SUPABASE_SERVICE_KEY が設定されていません。データを更新できません。")
+            return False
+
+        client = create_client(url, service_key)
+        
+        # DB カラム名に変換
+        db_update = {APP_TO_DB_COLS[k]: v for k, v in update_data.items() if k in APP_TO_DB_COLS}
+        
+        response = client.table(SUPABASE_TABLE).update(db_update).eq('plate_id', plate_id).execute()
+
+        if getattr(response, 'error', None):
+            error_message = getattr(response.error, 'message', response.error)
+            raise Exception(error_message)
+
+        return True
+    except Exception as e:
+        st.error(f"Supabaseデータ更新エラー: {str(e)}")
+        return False
+
+
 def create_baseball_field():
     fig = go.Figure()
 
@@ -588,11 +638,63 @@ if team_name and player_name:
                         vs_summary.columns = ['対投手タイプ（右/左）', '打席数', '安打', '本塁打', '四球', '三振']
                         st.dataframe(vs_summary, use_container_width=True)
                         
-                        st.markdown("#### 📈 打席データテーブル")
-                        st.dataframe(
-                            player_data[['入力日時', 'コース', '球種', '打球角度', '捕球位置', '投手の投げ手', '結果']],
-                            use_container_width=True
-                        )
+                        st.markdown("#### 📈 打席データテーブル（削除・編集可能）")
+                        
+                        # 各レコードに削除・編集ボタンを追加
+                        for idx, (_, row) in enumerate(player_data.iterrows()):
+                            col_data, col_edit, col_del = st.columns([0.75, 0.125, 0.125])
+                            
+                            with col_data:
+                                st.write(
+                                    f"📅 **{row['入力日時']}** | "
+                                    f"コース: {row['コース']} | 球種: {row['球種']} | "
+                                    f"打球角度: {row['打球角度']}° | 捕球位置: {row['捕球位置']} | "
+                                    f"結果: {row['結果']}"
+                                )
+                            
+                            with col_edit:
+                                if st.button("✏️ 編集", key=f"edit_{team}_{player}_{idx}"):
+                                    st.session_state[f"editing_{row['打席ID']}"] = True
+                            
+                            with col_del:
+                                if st.button("🗑️ 削除", key=f"del_{team}_{player}_{idx}"):
+                                    if delete_record_from_supabase(row['打席ID']):
+                                        st.session_state.all_batting_data = load_data_from_supabase()
+                                        st.success("✅ レコードが削除されました")
+                                        st.rerun()
+                        
+                        st.markdown("---")
+                        
+                        # 編集フォーム（折り畳み可能）
+                        with st.expander("📝 データを一括編集", expanded=False):
+                            st.info("最新のレコードを編集できます")
+                            if not player_data.empty:
+                                latest = player_data.iloc[0]
+                                
+                                col_edit1, col_edit2 = st.columns(2)
+                                with col_edit1:
+                                    new_course = st.selectbox("コース", ['内角高', '内角中', '内角低', '中央高', '中央中', '中央低', '外角高', '外角中', '外角低'], 
+                                                             value=latest['コース'], key='edit_course')
+                                    new_pitch = st.selectbox("球種", ['直球', 'スライダー', 'カーブ', 'フォーク', 'チェンジアップ', 'その他'],
+                                                            value=latest['球種'], key='edit_pitch')
+                                with col_edit2:
+                                    new_angle = st.selectbox("打球角度", {'ゴロ（0°）': 0.0, 'ライナー（20°）': 20.0, 'フライ（45°）': 45.0, '邪飛（60°）': 60.0, 'その他（30°）': 30.0},
+                                                            format_func=lambda x: next(k for k, v in {'ゴロ（0°）': 0.0, 'ライナー（20°）': 20.0, 'フライ（45°）': 45.0, '邪飛（60°）': 60.0, 'その他（30°）': 30.0}.items() if v == float(latest['打球角度'])),
+                                                            key='edit_angle')
+                                    new_result = st.selectbox("結果", ['凡退', '単打', '二塁打', '三塁打', '本塁打', '四球', '死球', '犠打', '犠飛', '三振', '出塁'],
+                                                             value=latest['結果'], key='edit_result')
+                                
+                                if st.button("✅ 編集を保存", key=f"save_edit_{team}_{player}"):
+                                    update_data = {
+                                        'コース': new_course,
+                                        '球種': new_pitch,
+                                        '打球角度': new_angle,
+                                        '結果': new_result
+                                    }
+                                    if update_record_in_supabase(latest['打席ID'], update_data):
+                                        st.session_state.all_batting_data = load_data_from_supabase()
+                                        st.success("✅ レコードが更新されました")
+                                        st.rerun()
                         
                         st.markdown("#### 📍 捕球位置分布（球場模式図）")
                         catch_positions = player_data['捕球位置'].tolist()
