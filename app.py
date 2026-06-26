@@ -506,9 +506,20 @@ if team_name and player_name:
                     [st.session_state.all_batting_data, pd.DataFrame([new_data])],
                     ignore_index=True
                 )
-                st.success("打席データがSupabaseに記録されました！")
+                
+                # 成功メッセージを表示
+                success_message = st.success("✅ 打席データがSupabaseに記録されました！")
+                
+                # フォーム入力をリセット
+                st.session_state.selected_pitch_location = None
+                st.session_state.selected_catch_position = None
+                
+                # 2秒後にページをリセットして新規入力できるようにする
+                import time
+                time.sleep(2)
+                st.rerun()
             else:
-                st.warning("Supabaseへの保存に失敗しました。接続情報とテーブル設定を確認してください。")
+                st.warning("❌ Supabaseへの保存に失敗しました。接続情報とテーブル設定を確認してください。")
 
             st.session_state.selected_pitch_location = None
             st.session_state.selected_catch_position = None
