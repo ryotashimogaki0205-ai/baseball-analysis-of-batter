@@ -120,10 +120,16 @@ def load_data_from_supabase():
 
 
 def save_record_to_supabase(record):
-    """Supabaseに新規レコードを保存する"""
+    """Supabaseに新規レコードを保存する（サービスキーを使用して RLS をバイパス）"""
     try:
-        client = get_supabase_client()
-        if client is None:
+        url, _ = get_supabase_config()
+        service_key = os.getenv("SUPABASE_SERVICE_KEY", SUPABASE_SERVICE_KEY)
+        
+        # RLS をバイパスするためにサービスキーでクライアントを作成
+        if service_key:
+            client = create_client(url, service_key)
+        else:
+            st.warning("SUPABASE_SERVICE_KEY が設定されていません。データを保存できません。")
             return False
 
         db_record = {APP_TO_DB_COLS[k]: v for k, v in record.items() if k in APP_TO_DB_COLS}
@@ -135,6 +141,11 @@ def save_record_to_supabase(record):
                 st.warning(
                     f"Supabaseテーブルが見つかりません: {SUPABASE_TABLE}。"
                     "Supabase管理画面でテーブル名とAPIキーを確認してください。"
+                )
+            elif '42501' in str(error_message) or 'row-level security' in str(error_message):
+                st.warning(
+                    "Row Level Security (RLS) ポリシーエラー。"
+                    "SUPABASE_SERVICE_KEY が正しく設定されているか確認してください。"
                 )
             raise Exception(error_message)
 
