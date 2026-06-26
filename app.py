@@ -524,71 +524,93 @@ if team_name and player_name:
             st.session_state.selected_pitch_location = None
             st.session_state.selected_catch_position = None
 
-    # --- 投球と打球のリンク表示（簡易版） --- #
-    st.markdown("### 記録された打席データ（リンク表示）")
+    # --- 投球と打球のリンク表示（階層フォルダ構造） --- #
+    st.markdown("### 📁 データ一覧（チーム → 選手 → 対戦チーム別）")
+    
     if not st.session_state.all_batting_data.empty:
-        # 現在の選手に絞って表示
-        current_player_data = st.session_state.all_batting_data[
-            (st.session_state.all_batting_data['チーム名'] == team_name) &
-            (st.session_state.all_batting_data['選手名'] == player_name)
-        ].sort_values(by='入力日時', ascending=False)
-        
-        if not current_player_data.empty:
-            st.write("**最新の打席データ:**")
-            latest_record = current_player_data.iloc[0]
-            st.info(
-                f"コース: {latest_record['コース']}、球種: {latest_record['球種']}、"
-                f"打球角度: {latest_record['打球角度']}、捕球位置: {latest_record['捕球位置']}、"
-                f"結果: {latest_record['結果']}"
-            )
-            st.markdown("---")
-            st.write("**これまでの打席データ:**")
-            st.dataframe(current_player_data[['入力日時', 'コース', '球種', '打球角度', '捕球位置', '結果']])
-
-            st.markdown("### この選手の集計")
-            result_summary = current_player_data.groupby('結果').size().rename('件数').reset_index()
-            st.dataframe(result_summary)
-
-            st.markdown("#### 投球コース別件数")
-            course_summary = current_player_data.groupby('コース').size().rename('件数').reset_index()
-            st.dataframe(course_summary)
-
-            st.markdown("#### 捕球位置分布（球場模式図）")
-            # 捕球位置を赤いドットで表示
-            catch_positions = current_player_data['捕球位置'].tolist()
-            fig_with_catches = create_baseball_field_with_catches(catch_positions)
-            st.plotly_chart(fig_with_catches, use_container_width=True)
-
-            st.markdown("#### 捕球位置別件数")
-            catch_summary = current_player_data.groupby('捕球位置').size().rename('件数').reset_index()
-            st.dataframe(catch_summary)
-
-            current_player_data = add_pitch_type_category(current_player_data)
-
-            st.markdown("#### 右投手・左投手別 捕球位置割合")
-            hand_summary = current_player_data.groupby(['投手の投げ手', '捕球位置']).size().rename('件数').reset_index()
-            hand_summary['割合'] = hand_summary.groupby('投手の投げ手')['件数'].transform(lambda x: (x / x.sum() * 100).round(1))
-            hand_ratio_pivot = hand_summary.pivot(index='投手の投げ手', columns='捕球位置', values='割合').fillna(0).astype(float)
-            st.dataframe(hand_ratio_pivot)
-            st.bar_chart(hand_ratio_pivot)
-
-            st.markdown("#### 直球・変化球別 捕球位置割合")
-            type_summary = current_player_data.groupby(['球種区分', '捕球位置']).size().rename('件数').reset_index()
-            type_summary['割合'] = type_summary.groupby('球種区分')['件数'].transform(lambda x: (x / x.sum() * 100).round(1))
-            type_ratio_pivot = type_summary.pivot(index='球種区分', columns='捕球位置', values='割合').fillna(0).astype(float)
-            st.dataframe(type_ratio_pivot)
-            st.bar_chart(type_ratio_pivot)
-        else:
-            st.write("この選手にはまだデータがありません。")
-
-        st.markdown("### 打者別集計")
-        batter_summary = st.session_state.all_batting_data.groupby(['チーム名', '選手名']).agg(
-            打席数=('打席ID', 'count'),
-            最新入力日時=('入力日時', 'max')
-        ).reset_index()
-        st.dataframe(batter_summary.sort_values(['チーム名', '選手名']))
+        # チーム別にグループ化
+        for team in sorted(st.session_state.all_batting_data['チーム名'].unique()):
+            team_data = st.session_state.all_batting_data[st.session_state.all_batting_data['チーム名'] == team]
+            team_record_count = len(team_data)
+            
+            # チーム別フォルダ
+            with st.expander(f"🏢 {team} ({team_record_count}打席)", expanded=False):
+                team_summary = team_data.groupby('結果').size().rename('件数').reset_index()
+                st.metric("総打席数", team_record_count)
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("安打", team_data[team_data['結果'].isin(['単打', '二塁打', '三塁打', '本塁打'])].shape[0])
+                with col2:
+                    st.metric("本塁打", team_data[team_data['結果'] == '本塁打'].shape[0])
+                with col3:
+                    st.metric("四球", team_data[team_data['結果'] == '四球'].shape[0])
+                
+                st.markdown("---")
+                
+                # 選手別にグループ化
+                for player in sorted(team_data['選手名'].unique()):
+                    player_data = team_data[team_data['選手名'] == player].sort_values(by='入力日時', ascending=False)
+                    player_record_count = len(player_data)
+                    
+                    # 選手別フォルダ
+                    with st.expander(f"👤 {player} ({player_record_count}打席)", expanded=False):
+                        col_player1, col_player2, col_player3 = st.columns(3)
+                        with col_player1:
+                            st.metric("打席数", player_record_count)
+                        with col_player2:
+                            hits = player_data[player_data['結果'].isin(['単打', '二塁打', '三塁打', '本塁打'])].shape[0]
+                            st.metric("安打", hits)
+                        with col_player3:
+                            if hits > 0:
+                                avg = (hits / player_record_count * 1000) // 1
+                                st.metric("打率", f"{avg/10:.1f}%")
+                        
+                        st.write("**最新の打席:**")
+                        latest = player_data.iloc[0]
+                        st.info(
+                            f"📅 {latest['入力日時']} | "
+                            f"球種: {latest['球種']} | "
+                            f"打球角度: {latest['打球角度']}° | "
+                            f"捕球位置: {latest['捕球位置']} | "
+                            f"結果: {latest['結果']}"
+                        )
+                        
+                        st.markdown("#### 📊 対戦チーム別統計")
+                        
+                        # 対戦チームの情報を抽出（現在は投手の投げ手を対戦情報として使用）
+                        vs_summary = player_data.groupby('投手の投げ手').agg(
+                            打席数=('打席ID', 'count'),
+                            安打=('結果', lambda x: (x.isin(['単打', '二塁打', '三塁打', '本塁打'])).sum()),
+                            本塁打=('結果', lambda x: (x == '本塁打').sum()),
+                            四球=('結果', lambda x: (x == '四球').sum()),
+                            三振=('結果', lambda x: (x == '三振').sum()),
+                        ).reset_index()
+                        vs_summary.columns = ['対投手タイプ（右/左）', '打席数', '安打', '本塁打', '四球', '三振']
+                        st.dataframe(vs_summary, use_container_width=True)
+                        
+                        st.markdown("#### 📈 打席データテーブル")
+                        st.dataframe(
+                            player_data[['入力日時', 'コース', '球種', '打球角度', '捕球位置', '投手の投げ手', '結果']],
+                            use_container_width=True
+                        )
+                        
+                        st.markdown("#### 📍 捕球位置分布（球場模式図）")
+                        catch_positions = player_data['捕球位置'].tolist()
+                        fig_with_catches = create_baseball_field_with_catches(catch_positions)
+                        st.plotly_chart(fig_with_catches, use_container_width=True, key=f"field_{team}_{player}")
+                        
+                        st.markdown("#### 球種別分析")
+                        col_analysis1, col_analysis2 = st.columns(2)
+                        with col_analysis1:
+                            st.markdown("**球種別件数**")
+                            pitch_summary = player_data.groupby('球種').size().rename('件数').reset_index()
+                            st.bar_chart(pitch_summary.set_index('球種'))
+                        with col_analysis2:
+                            st.markdown("**打球角度別件数**")
+                            angle_summary = player_data.groupby('打球角度').size().rename('件数').reset_index()
+                            st.bar_chart(angle_summary.set_index('打球角度'))
     else:
-        st.write("まだ打席データが記録されていません。")
+        st.write("📭 まだ打席データが記録されていません。")
 
 
     # --- データの保存と管理 --- #
